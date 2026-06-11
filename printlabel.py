@@ -8,7 +8,25 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from pdf2image import convert_from_path
 
 from labelmaker import do_print_job, reset_printer, SERIAL_TIMEOUT
-    
+
+
+def open_printer(comport, timeout):
+    """Open a connection to the printer.
+
+    If ``comport`` is a Bluetooth MAC address (e.g. 98-6e-e8-48-3e-15) and we're
+    on macOS, talk to it over an IOBluetooth RFCOMM channel. This works even
+    after the PT-P300BT has auto-slept, so no GUI re-pairing is needed -- the
+    printer just has to have been paired with the Mac once. Otherwise fall back
+    to a regular pyserial serial port (e.g. /dev/cu.* or COMx on Windows).
+    """
+    try:
+        from btserial import RFCOMMSerial, looks_like_bt_address
+    except ImportError:
+        looks_like_bt_address = lambda v: False  # noqa: E731 (IOBluetooth absent)
+    if looks_like_bt_address(comport):
+        return RFCOMMSerial(comport, timeout=timeout)
+    return serial.Serial(comport, timeout=timeout)
+
 
 def set_args():
     """
@@ -346,8 +364,13 @@ def draw_multiline_text(
 def main():
     p = set_args()
     args = p.parse_args()
-    if args.comport not in [p.device for p in list_ports.comports()]:
-        print("Port '" + args.comport + "' does not seem a valid serial communication port.")        
+    try:
+        from btserial import looks_like_bt_address
+    except ImportError:
+        looks_like_bt_address = lambda v: False  # noqa: E731
+    if (not looks_like_bt_address(args.comport)
+            and args.comport not in [p.device for p in list_ports.comports()]):
+        print("Port '" + args.comport + "' does not seem a valid serial communication port.")
     data = None
     if args.image is None: # not using the legacy mode
         height_of_the_printable_area = 64  # px: number of vertical pixels of the PT-P300BT printer (9 mm)
@@ -762,7 +785,7 @@ def main():
 
     # Similar to main() in labelmaker.py
     try:
-        ser = serial.Serial(args.comport, timeout=SERIAL_TIMEOUT)
+        ser = open_printer(args.comport, SERIAL_TIMEOUT)
     except serial.SerialException:
         p.error(
             'Printer on Bluetooth serial port "'

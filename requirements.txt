@@ -2,3 +2,7 @@ pyserial
 pillow
 packbits
 pdf2image
+# macOS only: lets printlabel.py talk to the printer over an IOBluetooth RFCOMM
+# channel (pass the printer's Bluetooth address instead of a /dev/cu port), which
+# works even after the PT-P300BT auto-sleeps -- no GUI re-pairing required.
+pyobjc-framework-IOBluetooth; sys_platform == "darwin"
