@@ -12,6 +12,42 @@ import serial
 
 BARS = '123456789'
 
+# Seconds to wait for the printer to reply to a status query. The PT-P300BT
+# auto-sleeps after a short idle and its serial port stays open even when the
+# link is dead, so without a timeout ser.read() blocks forever.
+SERIAL_TIMEOUT = 10
+
+def read_status(ser):
+    """Read a 32-byte status reply, raising a clear error if the printer does
+    not respond within the serial timeout (e.g. asleep, off, or disconnected)."""
+    buf = ser.read(32)
+    if len(buf) != 32:
+        raise RuntimeError(
+            f'Printer did not respond within {ser.timeout or SERIAL_TIMEOUT}s '
+            f'(received {len(buf)} of 32 status bytes). It may be asleep, '
+            'powered off, or disconnected — wake it and try again.'
+        )
+    return ptstatus.unpack_status(buf)
+
+def query_status(ser, attempts=4):
+    """Query printer status, retrying on the already-open port. Opening a
+    Bluetooth serial port to the PT-P300BT succeeds before the RFCOMM link is
+    actually up, so the first get_status often gets no reply; retrying gives
+    the link a few seconds to establish (printer LED goes solid)."""
+    for i in range(1, attempts + 1):
+        ser.reset_input_buffer()
+        ser.write(ptcbp.serialize_control('get_status'))
+        buf = ser.read(32)
+        if len(buf) == 32:
+            return ptstatus.unpack_status(buf)
+        print(f'   …no reply yet (attempt {i}/{attempts}); '
+              'waiting for the Bluetooth link to come up…')
+    raise RuntimeError(
+        f'Printer did not respond after {attempts} attempts '
+        f'(~{ser.timeout or SERIAL_TIMEOUT}s each). It may be asleep, powered '
+        'off, or disconnected — wake it (LED solid, not blinking) and retry.'
+    )
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('comport', help='Printer COM port.')
@@ -74,9 +110,8 @@ def do_print_job(ser, args, data):
 
     reset_printer(ser)
 
-    # Dump status
-    ser.write(ptcbp.serialize_control('get_status'))
-    status = ptstatus.unpack_status(ser.read(32))
+    # Dump status (retries while the Bluetooth link establishes)
+    status = query_status(ser)
     ptstatus.print_status(status)
 
     if status.err != 0x0000 or status.phase_type != 0x00 or status.phase != 0x0000:
@@ -114,7 +149,7 @@ def do_print_job(ser, args, data):
         ser.write(ptcbp.serialize_control('print'))
 
         # Dump status that the printer returns
-        status = ptstatus.unpack_status(ser.read(32))
+        status = read_status(ser)
         ptstatus.print_status(status)
 
     print("=> All done.")
@@ -132,7 +167,7 @@ def main():
         else:
             data = read_png(args.image)
 
-    ser = serial.Serial(args.comport)
+    ser = serial.Serial(args.comport, timeout=SERIAL_TIMEOUT)
 
     try:
         assert data is not None

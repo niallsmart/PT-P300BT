@@ -228,13 +228,20 @@ if __name__ == '__main__':
         exit(1)
 
     addr = sys.argv[1]
-    ser = serial.Serial(addr)
+    # The PT-P300BT auto-sleeps and the serial port stays open even when the
+    # link is dead, so use a read timeout to avoid blocking forever.
+    ser = serial.Serial(addr, timeout=10)
 
     ser.write(b'\x00'*64)
     ser.write(ptcbp.serialize_control('reset'))
     ser.write(ptcbp.serialize_control('get_status'))
-    resp = StatusRegister()
     buf = ser.read(32)
-    ctypes.memmove(ctypes.addressof(resp), buf, ctypes.sizeof(resp))
+    if len(buf) != 32:
+        print(f'Printer did not respond within {ser.timeout}s '
+              f'(received {len(buf)} of 32 status bytes). It may be asleep, '
+              'powered off, or disconnected — wake it and try again.',
+              file=sys.stderr)
+        exit(1)
+    resp = unpack_status(buf)
     print(buf)
     print_status(resp, verbose=True)

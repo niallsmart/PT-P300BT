@@ -7,7 +7,7 @@ from serial.tools import list_ports
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from pdf2image import convert_from_path
 
-from labelmaker import do_print_job, reset_printer
+from labelmaker import do_print_job, reset_printer, SERIAL_TIMEOUT
     
 
 def set_args():
@@ -762,7 +762,7 @@ def main():
 
     # Similar to main() in labelmaker.py
     try:
-        ser = serial.Serial(args.comport)
+        ser = serial.Serial(args.comport, timeout=SERIAL_TIMEOUT)
     except serial.SerialException:
         p.error(
             'Printer on Bluetooth serial port "'
@@ -775,6 +775,9 @@ def main():
     try:
         assert data is not None
         do_print_job(ser, args, data)
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
     finally:
         # Initialize
         reset_printer(ser)
