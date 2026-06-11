@@ -14,7 +14,7 @@ This repository provides a command-line tool in pure Python to print from a comp
 
 ### Text Rendering
 - **Unicode Support**: Full UTF-8 character support with optional Unicode escape sequences
-- **Custom Fonts**: Support for TrueType (.ttf) and OpenType (.otf) fonts
+- **Custom Fonts**: Support for TrueType (.ttf), TrueType Collection (.ttc), and OpenType (.otf) fonts
 - **Automatic Font Sizing**: Intelligent font size optimization to fit the printable area
 - **Multiline Text**: Support for multi-line labels with configurable line spacing
 - **Text Styling**: Configurable fill colors, stroke effects, and text centering
@@ -64,6 +64,21 @@ Text can be multiline when the text includes "\n" characters. (Use the two chara
 ```bash
 python printlabel.py -sl COM3 arial.ttf "Line 1\nLine 2\nLine 3"
 ```
+
+### TrueType Collection (.ttc) fonts
+
+TrueType Collection (`.ttc`) fonts — for example macOS's
+`/System/Library/Fonts/Helvetica.ttc` — are supported and auto-size just like a
+`.ttf`:
+
+```bash
+python3 printlabel.py COM7 "/System/Library/Fonts/Helvetica.ttc" "Hello"
+```
+
+Previously the automatic font sizer crashed on `.ttc` files with
+`OSError: division by zero`, because FreeType rejects them at very small sizes
+(the sizer walks the size up from zero). The sizer now skips those unusably
+small sizes automatically.
 
 ## Command Line Arguments
 
