@@ -417,11 +417,20 @@ def main():
                             )
                         except Exception as e:
                             p.error(f'Cannot load font "{args.fontname}" - {e}')
-                        
+
                         # Calculate dimensions for multiline text
-                        font_width, font_height, line_heights = calculate_multiline_dimensions(
-                            text_lines, font, args.line_spacing
-                        )
+                        try:
+                            font_width, font_height, line_heights = calculate_multiline_dimensions(
+                                text_lines, font, args.line_spacing
+                            )
+                        except OSError:
+                            # See note in the single-line loop: some .ttc fonts
+                            # raise a FreeType division-by-zero at tiny sizes.
+                            if font_size > 10 * height_of_the_printable_area:
+                                p.error(f'Cannot measure font "{args.fontname}" '
+                                        'at any usable size.')
+                            font_width, font_height, line_heights = 0, 0, []
+                            continue
                         
                         if stop:
                             print(
@@ -512,7 +521,17 @@ def main():
                             )
                         except Exception as e:
                             p.error(f'Cannot load font "{args.fontname}" - {e}')
-                        font_width, font_height = font.getbbox(text, anchor="lt")[2:]
+                        try:
+                            font_width, font_height = font.getbbox(text, anchor="lt")[2:]
+                        except OSError:
+                            # Some fonts (notably macOS .ttc collections) raise a
+                            # FreeType division-by-zero at very small sizes. Treat
+                            # the size as unusably small and keep growing.
+                            if font_size > 10 * height_of_the_printable_area:
+                                p.error(f'Cannot measure font "{args.fontname}" '
+                                        'at any usable size.')
+                            font_width, font_height = 0, 0
+                            continue
                         if stop:
                             print(
                                 "The max height of this text with font "
