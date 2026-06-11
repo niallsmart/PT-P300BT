@@ -251,6 +251,71 @@ To read the MAC address: `hcitool scan`. Setup /dev/rfcomm0.
 
 Usage: `python3 printlabel.py /dev/rfcomm0 FONT_NAME TEXT_TO_PRINT`
 
+## Bluetooth printer connection on macOS
+
+On macOS the recommended approach is to print **by Bluetooth address** over an
+IOBluetooth RFCOMM channel, rather than through a `/dev/cu.*` serial port.
+
+### Why (the `/dev/cu.*` quirk)
+
+When you pair the PT-P300BT via System Settings, macOS creates a
+`/dev/cu.PT-P300BT*` port. That port only carries data while the connection from
+the GUI pairing is live. The PT-P300BT **auto-sleeps after a short idle**, and
+once it does, reopening the `/dev/cu` port — or reconnecting with tools like
+`blueutil` — brings up the base Bluetooth link but **not a working data
+session**, so reads simply time out. Opening an RFCOMM channel directly through
+the IOBluetooth framework performs the same full connect the GUI does and works
+even from a cold/slept state.
+
+`printlabel.py` does this automatically when you pass a Bluetooth MAC address as
+the port.
+
+### One-time setup
+
+1. Install the dependencies (the macOS one is `pyobjc-framework-IOBluetooth`,
+   already in `requirements.txt`):
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Pair the printer once** via  > System Settings > Bluetooth (turn the
+   printer on so it appears under *Nearby Devices*, then Connect). This is only
+   needed once, so macOS has the printer's service record; you do **not** need to
+   re-pair for every print.
+
+3. Find the printer's Bluetooth address:
+
+   ```bash
+   system_profiler SPBluetoothDataType | grep -A4 PT-P300BT   # look for "Address:"
+   # or, if you have blueutil installed:
+   blueutil --paired | grep -i p300
+   ```
+
+   It looks like `98-6e-e8-48-3e-15` (dashes or colons both work).
+
+### Usage
+
+Pass the Bluetooth address in place of the COM port:
+
+```bash
+python3 printlabel.py 98-6e-e8-48-3e-15 "/System/Library/Fonts/Supplemental/Arial.ttf" "Hello"
+```
+
+No GUI step is needed for subsequent prints — the connection is established
+programmatically each time, even after the printer has slept.
+
+### Troubleshooting
+
+- **`Printer did not respond ...`** — the printer is asleep, off, or out of
+  range. Press its power button so the LED is solid, then retry.
+- **Flashing red LED / `Communication error`** — the printer is in a stuck error
+  state (e.g. after an interrupted/`-n` transfer that left raster data buffered).
+  Power-cycle the printer to clear it.
+- The legacy `/dev/cu.PT-P300BT*` serial port still works **immediately after a
+  fresh GUI pairing**, but will stop responding once the printer sleeps — prefer
+  the address-based method above.
+
 ## Creating an executable asset for the GUI
 
 To build an executable file via [pyinstaller](https://pyinstaller.org/en/stable/), first install *pyinstaller* with `pip install pyinstaller`.
